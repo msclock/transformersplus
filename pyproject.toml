@@ -1,0 +1,101 @@
+[project]
+name = "transformersplus"
+readme = "README.md"
+description = "Add Some plus features to transformers."
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Education",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+authors = []
+maintainers = []
+keywords = [
+    "machine-learning",
+    "deep-learning",
+    "transformers",
+    "inference",
+    "pytorch",
+    "vision",
+    "nlp",
+]
+license = { text = "Apache 2.0" }
+requires-python = ">=3.7"
+dependencies = ["transformers >= 4.0.0"]
+
+[project.urls]
+"Documentation" = "https://github.com/msclock/transformersplus.git"
+"Source" = "https://github.com/msclock/transformersplus.git"
+"Tracker" = "https://github.com/msclock/transformersplus/issues"
+
+[project.optional-dependencies]
+test = ["pytest >= 5.2", "pytest-mock >= 3.8.2"]
+dev = [
+    "black >= 22.8",
+    "build >= 0.8",
+    "ipython >= 7.16",
+    "isort >= 5.10",
+    "pdbpp >= 0.10",
+    "pip >= 21.1",
+    "psutil ~= 5.1",
+    "twine >= 4.0",
+]
+
+[build-system]
+requires = ["setuptools>=65.3.0", "setuptools_scm>=2.0.0,<3", "wheel>=0.37.1"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+
+[tool.setuptools]
+include-package-data = true
+license-files = ["LICENSE"]
+
+[tool.distutils.bdist_wheel]
+python_tag = "py37.py38.py39.py310"
+
+[tool.setuptools.packages.find]
+namespaces = false
+
+[tool.setuptools.package-data]
+yolov5_utils = ["**/*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "transformersplus.__version__.__version__" }
+
+[tool.black]
+line-length = 120
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.mypy_cache
+    | \.venv
+    | _build
+    | build
+    | dist
+  )/
+)
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120
