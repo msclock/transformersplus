@@ -1,0 +1,3 @@
+gradio
+transformersplus
+tritonclient[all]==1.3.1
