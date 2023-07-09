@@ -52,18 +52,24 @@ class TritonModelClient:
         """Returns the model runtime"""
         return self.metadata.get("backend", self.metadata.get("platform"))
 
-    def __call__(self, *args, **kwargs) -> typing.Union[torch.Tensor, typing.Tuple[torch.Tensor, ...]]:
+    def __call__(self, *args, **kwargs) -> typing.Union[torch.Tensor, typing.Tuple[torch.Tensor, ...], typing.Mapping]:
         """Invokes the model. Parameters can be provided via args or kwargs.
         args, if provided, are assumed to match the order of inputs of the model.
         kwargs are matched with the model input names.
         """
         inputs = self._create_inputs(*args, **kwargs)
         response = self.client.infer(model_name=self.model_name, inputs=inputs)
-        result = []
+
+        if len(self.metadata["outputs"]) == 1:
+            output = self.metadata["outputs"][0]
+            return torch.as_tensor(response.as_numpy(output["name"]))
+
+        result = {}
         for output in self.metadata["outputs"]:
             tensor = torch.as_tensor(response.as_numpy(output["name"]))
-            result.append(tensor)
-        return result[0] if len(result) == 1 else result
+            result[output["name"]] = tensor
+
+        return result
 
     def _create_inputs(self, *args, **kwargs):
         args_len, kwargs_len = len(args), len(kwargs)
@@ -106,8 +112,6 @@ class TritonModel(torch.nn.Module):
 
     def __init__(self, url) -> None:
         super().__init__()
-        from transformersplus.utils.triton import TritonModelClient
-
         self.model = TritonModelClient(model_url=url)
 
     def forward(self, *input, **kwargs):
