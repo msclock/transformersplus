@@ -7,7 +7,9 @@ Generate model of the tritonserver with model_navigator script.
 ```bash
 docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace nvcr.io/nvidia/pytorch:<yy.mm>-py3 bash -c '\
     pip install -U --extra-index-url https://pypi.ngc.nvidia.com triton-model-navigator && \
-    ./optimize.py --max-sequence-length=128 \
+    ./optimize.py \
+        --model-name=albert_masklm \
+        --max-sequence-length=128 \
         --device=0 \
         --model-repository=.model_repository'
 ```

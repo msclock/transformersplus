@@ -1,11 +1,12 @@
+from typing import Mapping
 import gradio as gr
 import torch
-from torch.nn.functional import softmax
 import transformers
 from transformers import AutoTokenizer
 
 
 tokenizer = AutoTokenizer.from_pretrained("uer/albert-base-chinese-cluecorpussmall")
+MAX_LENGTH = 128  # depends on the model
 
 
 def is_triton_url(model_url: str):
@@ -27,15 +28,15 @@ def albert_masklm(
 
         model_backend = TritonModel(model)
     else:
-        from transformers.models.albert.modeling_albert import AlbertForMaskedLM
+        from transformers import AutoModelForMaskedLM
 
-        model_backend = AlbertForMaskedLM.from_pretrained(model)
+        model_backend = AutoModelForMaskedLM.from_pretrained(model)
 
     inputs = tokenizer(
         [text],
         padding=transformers.utils.PaddingStrategy.MAX_LENGTH,
         truncation=True,
-        max_length=128,
+        max_length=MAX_LENGTH,
         return_tensors=transformers.TensorType.PYTORCH,
     )
     input_ids = inputs["input_ids"][0]
@@ -44,7 +45,7 @@ def albert_masklm(
         as_tuple=False,
     ).squeeze(-1)
     outputs = model_backend(**inputs)
-    if isinstance(outputs, transformers.modeling_outputs.MaskedLMOutput):
+    if isinstance(outputs, Mapping):
         outputs = outputs["logits"]
     logits = outputs[0, masked_index, :]
     probs = logits.softmax(dim=-1)

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import math
 import os
 
 # https://stackoverflow.com/questions/62691279/how-to-disable-tokenizers-parallelism-true-false-warning
@@ -9,60 +8,47 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import argparse
 import itertools
 import pathlib
+import string
 
 import numpy as np
-from datasets import load_dataset
-from torch.utils.data import DataLoader
-from transformers import AutoConfig, AutoTokenizer, DataCollatorWithPadding, TensorType
-from transformers.models.albert.configuration_albert import AlbertOnnxConfig
-from transformers.models.albert.modeling_albert import AlbertForMaskedLM
-
+from transformers import AutoTokenizer, TensorType
+from transformers.utils import PaddingStrategy
+from transformers import AutoModelForMaskedLM
+from transformers.onnx.features import FeaturesManager
 import model_navigator as nav
 
 
 def get_model(model_name: str):
-    model = AlbertForMaskedLM.from_pretrained(model_name)
-    model.config.return_dict = True
+    model = AutoModelForMaskedLM.from_pretrained(model_name)
+    model.config.return_dict = False  # return one value from the inference method
     return model
 
 
 def get_dataloader(
     model_name: str,
-    dataset_name: str,
-    max_batch_size: int,
-    num_samples: int,
     max_sequence_length: int,
 ):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if max_sequence_length == -1:
         max_sequence_length = getattr(tokenizer, "model_max_length", 512)
 
-    model_config = AutoConfig.from_pretrained(model_name)
-    onnx_config = AlbertOnnxConfig(model_config)
-    input_names = tuple(onnx_config.inputs.keys())
-    dataset = load_dataset(dataset_name)["train"]
+    if max_sequence_length > 512:
+        max_sequence_length = 512
 
-    def preprocess_function(examples):
-        return tokenizer(
-            examples["content"], truncation=True, max_length=max_sequence_length
-        )
+    num_samples = 10
 
-    tokenized_dataset = dataset.map(preprocess_function, batched=True)
-    tokenized_dataset = tokenized_dataset.remove_columns(
-        [c for c in tokenized_dataset.column_names if c not in input_names]
-    )
-    dataloader = DataLoader(
-        tokenized_dataset,
-        batch_size=max_batch_size,
-        collate_fn=DataCollatorWithPadding(
-            tokenizer=tokenizer,
-            padding=True,
+    return [
+        tokenizer(
+            "".join(
+                np.random.choice(list(string.ascii_letters + string.digits), size=32)
+            ),
+            padding=PaddingStrategy.MAX_LENGTH,
+            truncation=True,
             max_length=max_sequence_length,
             return_tensors=TensorType.PYTORCH,
-        ),
-    )
-
-    return [sample for sample, _ in zip(dataloader, range(num_samples))]
+        )
+        for _ in range(num_samples)
+    ]
 
 
 def get_verify_function():
@@ -79,30 +65,20 @@ def get_verify_function():
     return verify_func
 
 
-def get_profiler_config(FLAGS):
-    return nav.torch.ProfilerConfig(
-        run_profiling=True,
-        batch_sizes=[
-            1,
-            math.ceil(FLAGS.batch_size / 2),
-            FLAGS.batch_size,
-        ],
-        measurement_mode=nav.MeasurementMode.TIME_WINDOWS,
-        measurement_interval=2500,  # ms
-        measurement_request_count=10,
-        stability_percentage=15,
-        max_trials=5,
-        throughput_cutoff_threshold=0.1,
-    )
-
-
 def get_configuration(
     model_name: str,
     batch_size: int,
     max_sequence_length: int,
 ):
-    model_config = AutoConfig.from_pretrained(model_name)
-    onnx_config = AlbertOnnxConfig(model_config)
+    model = FeaturesManager.get_model_from_feature(
+        model=model_name,
+        feature="masked-lm",
+    )
+    _, model_onnx_config = FeaturesManager.check_supported_model_or_raise(
+        model=model,
+        feature="masked-lm",
+    )
+    onnx_config = model_onnx_config(model.config)
     input_names = tuple(onnx_config.inputs.keys())
     output_names = tuple(onnx_config.outputs.keys())
     dynamic_axes = {
@@ -119,14 +95,26 @@ def get_configuration(
         tensorrt_profile.add(
             k,
             (1, max_sequence_length),
-            (math.ceil(batch_size / 2), max_sequence_length),
+            (1, max_sequence_length),
             (batch_size, max_sequence_length),
         )
+
+    optimization_profile = nav.OptimizationProfile(
+        max_batch_size=batch_size,
+        batch_sizes=[
+            1,
+            batch_size,
+        ],
+        stability_percentage=15,
+        max_trials=5,
+        throughput_cutoff_threshold=0.1,
+    )
 
     configuration = {
         "input_names": input_names,
         "output_names": output_names,
         "sample_count": 10,
+        "optimization_profile": optimization_profile,
         "custom_configs": [
             nav.TorchConfig(
                 jit_type=nav.JitType.TRACE,
@@ -176,18 +164,13 @@ def parse_args():
         "--max-sequence-length",
         type=int,
         default=-1,
-        help="max input text sequence length on model",
+        help="max input text sequence length on model, up to 512",
     )
     parser.add_argument(
         "--device",
         type=str,
         default="cpu",
         help="device = None or 'cpu' or 0 or '0' or '0,1,2,3'",
-    )
-    parser.add_argument(
-        "--min-top1-accuracy",
-        type=float,
-        default=0.9,
     )
     parser.add_argument(
         "--model-repository",
@@ -199,19 +182,12 @@ def parse_args():
 
 
 def main(FLAGS):
-    dataset_name = "madao33/new-title-chinese"
-    num_samples = 10
-
     model = get_model(FLAGS.input_model)
     dataloader = get_dataloader(
         model_name=FLAGS.input_model,
-        dataset_name=dataset_name,
-        max_batch_size=FLAGS.batch_size,
-        num_samples=num_samples,
         max_sequence_length=FLAGS.max_sequence_length,
     )
     verify_func = get_verify_function()
-    profiler_config = get_profiler_config(FLAGS)
     configuration = get_configuration(
         model_name=FLAGS.input_model,
         batch_size=FLAGS.batch_size,
@@ -221,14 +197,13 @@ def main(FLAGS):
     package = nav.torch.optimize(
         model=model,
         dataloader=dataloader,
-        # verify_func=verify_func,
+        verify_func=verify_func,
         target_device=nav.DeviceKind.CPU
         if str(FLAGS.device) == "cpu"
         else nav.DeviceKind.CUDA,
         debug=True,
         verbose=True,
         workspace=pathlib.Path(FLAGS.workspace) / FLAGS.model_name,
-        profiler_config=profiler_config,
         **configuration,
     )
 
