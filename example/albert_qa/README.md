@@ -8,7 +8,7 @@ Generate model of the tritonserver with model_navigator script.
 docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace nvcr.io/nvidia/pytorch:<yy.mm>-py3 bash -c '\
     pip install -U --extra-index-url https://pypi.ngc.nvidia.com triton-model-navigator && \
     ./optimize.py \
-        --model-name=albert_masklm \
+        --model-name=albert_qa \
         --max-sequence-length=128 \
         --device=0 \
         --model-repository=.model_repository'
@@ -25,7 +25,7 @@ docker run -it --gpus=all \
     -p8000:8000 -p8001:8001 -p8002:8002 \
     -v $(pwd):/workspace -w /workspace \
     nvcr.io/nvidia/tritonserver:<yy.mm>-py3 \
-    bash -c 'tritonserver --model-repository=.model_repository --model-control-mode=explicit --load-model=albert_masklm'
+    bash -c 'tritonserver --model-repository=.model_repository --model-control-mode=explicit --load-model=albert_qa'
 ```
 
 Test with full functional app-ui based on Gradio.
@@ -35,4 +35,4 @@ python app.py
 
 ![Alt text](image.png)
 
-Then select triton model and input a mask chinese text.
+Then select triton model and input a chinese qa.

@@ -1,3 +1,4 @@
 gradio
-transformersplus
+transformers
+mlflow==2.4.1
 tritonclient[all]==1.3.1
